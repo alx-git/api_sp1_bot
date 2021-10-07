@@ -30,24 +30,45 @@ bot = Bot(token=TELEGRAM_TOKEN)
 
 
 def parse_homework_status(homework):
-    homework_name = homework['homework_name']
-    if homework['status'] == 'rejected':
-        verdict = 'К сожалению, в работе нашлись ошибки.'
-    else:
-        verdict = 'Ревьюеру всё понравилось, работа зачтена!'
+    try:
+        homework_name = homework['homework_name']
+    except KeyError:
+        logger.error('Не найден ключ homework_name')
+        homework_name = None
+
+    try:
+        if homework['status'] == 'rejected':
+            verdict = 'К сожалению, в работе нашлись ошибки.'
+        elif homework['status'] == 'approved':
+            verdict = 'Ревьюеру всё понравилось, работа зачтена!'
+        elif homework['status'] == 'reviewing':
+            verdict = 'Работа взята в ревью.'
+        else:
+            logger.warning('Появился новый статус.')
+            verdict = None
+    except KeyError:
+        logger.error('Не найден ключ status')
+        verdict = None
+
     return f'У вас проверили работу "{homework_name}"!\n\n{verdict}'
 
 
 def get_homeworks(current_timestamp):
-    homework_statuses = requests.get(
-        url,
-        headers=headers,
-        params={'from_date': current_timestamp}
-    )
-    return homework_statuses.json()
+    try:
+        homework_statuses = requests.get(
+            url,
+            headers=headers,
+            params={'from_date': current_timestamp}
+        ).json()
+    except requests.exceptions.RequestException as e:
+        homework_statuses = {}
+        logging.error(e, exc_info=True)
+
+    return homework_statuses
 
 
 def send_message(message):
+    logger.info('Сообщение отправлено')
     return bot.send_message(CHAT_ID, message)
 
 
@@ -62,7 +83,6 @@ def main():
             for homework in homeworks:
                 message = parse_homework_status(homework)
                 send_message(message)
-                logger.info('Сообщение отправлено')
             time.sleep(5 * 60)
 
         except Exception as e:
